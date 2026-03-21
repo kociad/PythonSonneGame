@@ -178,9 +178,17 @@ class HelpScene(Scene):
 
         current_y += theme.THEME_LAYOUT_BUTTON_SECTION_GAP
         current_y = self._set_component_center(
-            self.rules_button, button_center_x, current_y, section_gap)
+            self.rules_button,
+            button_center_x,
+            current_y,
+            theme.THEME_LAYOUT_VERTICAL_GAP,
+        )
         self._set_component_center(
-            self.back_button, button_center_x, current_y, section_gap)
+            self.back_button,
+            button_center_x,
+            current_y,
+            theme.THEME_LAYOUT_VERTICAL_GAP,
+        )
 
     def handle_events(self, events: list[pygame.event.Event]) -> None:
         """Handle events for the help scene."""
