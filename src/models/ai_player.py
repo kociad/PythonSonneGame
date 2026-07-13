@@ -1400,9 +1400,6 @@ class AIPlayer(Player):
                 completion_ratio = completed_sides / total_sides if total_sides > 0 else 0
                 score += completion_ratio * self._preset["figure_opportunity"]
 
-            if not structure.get_figures():
-                score += 30.0
-
             structure_type = structure.get_structure_type()
             if structure_type == "City":
                 score += self._evaluate_city_figure_placement(structure)
@@ -1583,9 +1580,6 @@ class AIPlayer(Player):
                                   if card.get_position())
             completion_ratio = completed_sides / total_sides if total_sides > 0 else 0
             score += completion_ratio * 50.0
-
-        if not structure.get_figures():
-            score += 30.0
 
         return score
 
