@@ -40,8 +40,8 @@ class AIPreset:
         "completion_bonus": 150,
         # "size_bonus": 30,  # Reserved; currently unused by the evaluator.
         "field_multiplier": 1.0,
-        "conservation_threshold": 2,
-        "placement_threshold": 100,
+        "conservation_threshold": 3,
+        "placement_threshold": 200,
         "opponent_blocking": 0.7,
         "center_penalty": 1.5,
         "figure_opportunity": 120,
@@ -59,8 +59,8 @@ class AIPreset:
         "completion_bonus": 150,
         # "size_bonus": 30,  # Reserved; currently unused by the evaluator.
         "field_multiplier": 1.0,
-        "conservation_threshold": 1,
-        "placement_threshold": 100,
+        "conservation_threshold": 2,
+        "placement_threshold": 200,
         "opponent_blocking": 0.7,
         "center_penalty": 1.5,
         "figure_opportunity": 120,
@@ -75,22 +75,22 @@ class AIPreset:
     }
 
     EXPERT = {
-        "completion_bonus": 150,
+        "completion_bonus": 180,
         # "size_bonus": 30,  # Reserved; currently unused by the evaluator.
         "field_multiplier": 1.0,
-        "conservation_threshold": 1,
-        "placement_threshold": 150,
-        "opponent_blocking": 0.7,
-        "center_penalty": 1.5,
-        "figure_opportunity": 120,
+        "conservation_threshold": 2,
+        "placement_threshold": 200,
+        "opponent_blocking": 0.5,
+        "center_penalty": 1.0,
+        "figure_opportunity": 140,
         "structure_connection": 20,
-        "unoccupied_bonus": 35,
-        "completion_ratio_bonuses": [40, 70, 100, 130],
+        "unoccupied_bonus": 30,
+        "completion_ratio_bonuses": [30, 70, 130, 200],
         "size_penalties": [-25, -55, -100],
         "field_bonuses": [15, 25, 35],
-        "city_bonuses": [40, 60, 80],
-        "road_bonuses": [30, 45, 60],
-        "monastery_bonuses": [80, 120, 160]
+        "city_bonuses": [35, 70, 110],
+        "road_bonuses": [30, 60, 95],
+        "monastery_bonuses": [80, 150, 240]
     }
 
 
