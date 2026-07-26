@@ -19,17 +19,17 @@ class AIPreset:
 
     EASY = {
         "completion_bonus": 100,
-        "size_bonus": 20,
+        # "size_bonus": 20,  # Reserved; currently unused by the evaluator.
         "field_multiplier": 0.8,
         "conservation_threshold": 4,
-        "placement_threshold": 20,
+        "placement_threshold": 10000,
         "opponent_blocking": 0.5,
         "center_penalty": 2.0,
         "figure_opportunity": 80,
         "structure_connection": 15,
         "unoccupied_bonus": 25,
         "completion_ratio_bonuses": [30, 50, 70, 90],
-        "size_penalties": [0, 0, 0],
+        "size_penalties": [-15, -35, -60],
         "field_bonuses": [10, 20, 30],
         "city_bonuses": [30, 50, 70],
         "road_bonuses": [25, 40, 55],
@@ -38,17 +38,17 @@ class AIPreset:
 
     NORMAL = {
         "completion_bonus": 150,
-        "size_bonus": 30,
+        # "size_bonus": 30,  # Reserved; currently unused by the evaluator.
         "field_multiplier": 1.0,
         "conservation_threshold": 3,
-        "placement_threshold": 15,
+        "placement_threshold": 200,
         "opponent_blocking": 0.7,
         "center_penalty": 1.5,
         "figure_opportunity": 120,
         "structure_connection": 20,
         "unoccupied_bonus": 35,
         "completion_ratio_bonuses": [40, 70, 100, 130],
-        "size_penalties": [0, 0, 0],
+        "size_penalties": [-20, -45, -80],
         "field_bonuses": [15, 25, 35],
         "city_bonuses": [40, 60, 80],
         "road_bonuses": [30, 45, 60],
@@ -56,41 +56,41 @@ class AIPreset:
     }
 
     HARD = {
-        "completion_bonus": 200,
-        "size_bonus": 40,
-        "field_multiplier": 1.2,
+        "completion_bonus": 150,
+        # "size_bonus": 30,  # Reserved; currently unused by the evaluator.
+        "field_multiplier": 1.0,
         "conservation_threshold": 2,
-        "placement_threshold": 10,
-        "opponent_blocking": 0.9,
-        "center_penalty": 1.0,
-        "figure_opportunity": 150,
-        "structure_connection": 25,
-        "unoccupied_bonus": 45,
-        "completion_ratio_bonuses": [50, 90, 130, 170],
-        "size_penalties": [0, 0, 0],
-        "field_bonuses": [20, 30, 40],
-        "city_bonuses": [50, 70, 90],
-        "road_bonuses": [35, 50, 65],
-        "monastery_bonuses": [100, 150, 200]
+        "placement_threshold": 200,
+        "opponent_blocking": 0.7,
+        "center_penalty": 1.5,
+        "figure_opportunity": 120,
+        "structure_connection": 20,
+        "unoccupied_bonus": 35,
+        "completion_ratio_bonuses": [40, 70, 100, 130],
+        "size_penalties": [-25, -55, -100],
+        "field_bonuses": [15, 25, 35],
+        "city_bonuses": [40, 60, 80],
+        "road_bonuses": [30, 45, 60],
+        "monastery_bonuses": [80, 120, 160]
     }
 
     EXPERT = {
-        "completion_bonus": 250,
-        "size_bonus": 50,
-        "field_multiplier": 1.4,
-        "conservation_threshold": 1,
-        "placement_threshold": 5,
-        "opponent_blocking": 1.0,
-        "center_penalty": 0.8,
-        "figure_opportunity": 180,
-        "structure_connection": 30,
-        "unoccupied_bonus": 55,
-        "completion_ratio_bonuses": [60, 110, 160, 210],
-        "size_penalties": [0, 0, 0],
-        "field_bonuses": [25, 35, 45],
-        "city_bonuses": [60, 80, 100],
-        "road_bonuses": [40, 55, 70],
-        "monastery_bonuses": [120, 180, 240]
+        "completion_bonus": 180,
+        # "size_bonus": 30,  # Reserved; currently unused by the evaluator.
+        "field_multiplier": 1.0,
+        "conservation_threshold": 2,
+        "placement_threshold": 200,
+        "opponent_blocking": 0.5,
+        "center_penalty": 1.0,
+        "figure_opportunity": 140,
+        "structure_connection": 20,
+        "unoccupied_bonus": 30,
+        "completion_ratio_bonuses": [30, 70, 130, 200],
+        "size_penalties": [-25, -55, -100],
+        "field_bonuses": [15, 25, 35],
+        "city_bonuses": [35, 70, 110],
+        "road_bonuses": [30, 60, 95],
+        "monastery_bonuses": [80, 150, 240]
     }
 
 
@@ -110,7 +110,7 @@ class AIPlayer(Player):
     
     Key Preset Parameters:
     - completion_bonus: Points awarded for completing structures (higher = more completion-focused)
-    - size_bonus: Points for larger structures (higher = prefers bigger structures)
+    - size_bonus: Reserved for future use; currently not part of move evaluation
     - field_multiplier: Multiplier for field scoring potential (higher = more field-focused)
     - conservation_threshold: When to conserve meeples (lower = more aggressive placement)
     - placement_threshold: Minimum score to place a meeple (higher = more selective)
@@ -815,6 +815,85 @@ class AIPlayer(Player):
                 game_session, x, y, card_copy))
         return score
 
+    @staticmethod
+    def _get_candidate_structure(game_session: 'GameSession', x: int, y: int,
+                                 direction: str) -> Optional['Structure']:
+        """Resolve a structure both before and after a candidate tile is placed."""
+        structure = game_session.structure_map.get((x, y, direction))
+        if structure is not None:
+            return structure
+
+        neighbors = {
+            "N": (x, y - 1, "S"),
+            "E": (x + 1, y, "W"),
+            "S": (x, y + 1, "N"),
+            "W": (x - 1, y, "E"),
+        }
+        neighbor_key = neighbors.get(direction)
+        return (game_session.structure_map.get(neighbor_key)
+                if neighbor_key else None)
+
+    @staticmethod
+    def _calculate_candidate_monastery_completion_ratio(
+            game_session: 'GameSession', x: int, y: int) -> float:
+        """Return the occupied share of the eight cells around a candidate."""
+        board = game_session.get_game_board()
+        neighbor_offsets = (
+            (-1, -1), (0, -1), (1, -1),
+            (-1, 0),           (1, 0),
+            (-1, 1),  (0, 1),  (1, 1),
+        )
+        occupied = sum(
+            board.get_card(x + offset_x, y + offset_y) is not None
+            for offset_x, offset_y in neighbor_offsets)
+        return occupied / len(neighbor_offsets)
+
+    @staticmethod
+    def _calculate_structure_completion_ratio(structure: 'Structure') -> float:
+        """Return the share of a structure's required neighboring tiles present."""
+        structure_type = structure.get_structure_type()
+        if structure.get_is_completed():
+            return 1.0
+        if structure_type == "Field":
+            return 0.0
+
+        if structure_type == "Monastery":
+            center_cards = [
+                card for card, direction in structure.card_sides
+                if direction == "C"
+            ]
+            if not center_cards:
+                return 0.0
+
+            neighbors = center_cards[0].get_neighbors()
+            occupied_positions = {
+                direction for direction in ("N", "E", "S", "W")
+                if neighbors.get(direction)
+            }
+            diagonal_directions = {
+                "N": (("E", "NE"), ("W", "NW")),
+                "E": (("N", "NE"), ("S", "SE")),
+                "S": (("E", "SE"), ("W", "SW")),
+                "W": (("N", "NW"), ("S", "SW")),
+            }
+            for direction, diagonals in diagonal_directions.items():
+                neighbor = neighbors.get(direction)
+                if neighbor:
+                    occupied_positions.update(
+                        position for neighbor_direction, position in diagonals
+                        if neighbor.get_neighbor(neighbor_direction))
+            return len(occupied_positions) / 8.0
+
+        openable_sides = [(card, direction)
+                          for card, direction in structure.card_sides
+                          if direction != "C"]
+        if not openable_sides:
+            return 0.0
+        connected_sides = sum(
+            bool(card.get_neighbors().get(direction))
+            for card, direction in openable_sides)
+        return connected_sides / len(openable_sides)
+
     def _evaluate_card_placement_advanced(self, game_session: 'GameSession',
                                           x: int, y: int,
                                           card_copy: Card) -> float:
@@ -832,13 +911,17 @@ class AIPlayer(Player):
         """
         score = 0.0
         terrains = card_copy.get_terrains()
+        evaluated_structures = set()
 
         for direction, terrain_type in terrains.items():
-            if direction == "C":
+            if direction == "C" and terrains.get(direction) != "monastery":
                 continue
 
-            structure = game_session.structure_map.get((x, y, direction))
+            structure = self._get_candidate_structure(game_session, x, y, direction)
+            if structure in evaluated_structures:
+                continue
             if structure:
+                evaluated_structures.add(structure)
                 score += self._preset["structure_connection"]
 
                 if structure.get_is_completed():
@@ -848,19 +931,9 @@ class AIPlayer(Player):
                     score += self._preset["unoccupied_bonus"]
 
                 total_sides = len(structure.card_sides)
-                completed_sides = sum(1 for card, _ in structure.card_sides
-                                      if card.get_position())
-                completion_ratio = completed_sides / total_sides if total_sides > 0 else 0
+                completion_ratio = self._calculate_structure_completion_ratio(structure)
 
-                # Apply completion ratio bonuses
-                if completion_ratio > 0.9:
-                    score += self._preset["completion_ratio_bonuses"][3]
-                elif completion_ratio > 0.7:
-                    score += self._preset["completion_ratio_bonuses"][2]
-                elif completion_ratio > 0.5:
-                    score += self._preset["completion_ratio_bonuses"][1]
-                elif completion_ratio > 0.3:
-                    score += self._preset["completion_ratio_bonuses"][0]
+                score += self._completion_ratio_bonus(completion_ratio)
 
                 # Apply size penalties
                 if total_sides > 8:
@@ -880,18 +953,37 @@ class AIPlayer(Player):
                 elif structure_type == "Monastery":
                     score += self._evaluate_monastery_specific(
                         game_session, structure, completion_ratio)
+            elif direction == "C" and terrain_type == "monastery":
+                completion_ratio = self._calculate_candidate_monastery_completion_ratio(
+                    game_session, x, y)
+                score += self._preset["unoccupied_bonus"]
+                score += self._completion_ratio_bonus(completion_ratio)
+                score += self._evaluate_monastery_specific(
+                    game_session, None, completion_ratio)
 
         center = game_session.get_game_board().get_center()
         distance_from_center = abs(x - center) + abs(y - center)
         score -= distance_from_center * self._preset["center_penalty"]
 
         for direction, terrain_type in terrains.items():
-            if direction == "C":
+            if direction == "C" and terrains.get(direction) != "monastery":
                 continue
-            if not game_session.structure_map.get((x, y, direction)):
+            if not self._get_candidate_structure(game_session, x, y, direction):
                 score += 10.0
 
         return score
+
+    def _completion_ratio_bonus(self, completion_ratio: float) -> float:
+        """Select the configured bonus for a structure's completion share."""
+        if completion_ratio > 0.9:
+            return self._preset["completion_ratio_bonuses"][3]
+        if completion_ratio > 0.7:
+            return self._preset["completion_ratio_bonuses"][2]
+        if completion_ratio > 0.5:
+            return self._preset["completion_ratio_bonuses"][1]
+        if completion_ratio > 0.3:
+            return self._preset["completion_ratio_bonuses"][0]
+        return 0.0
 
     def _evaluate_city_specific(self, game_session: 'GameSession',
                                 structure: 'Structure',
@@ -942,7 +1034,7 @@ class AIPlayer(Player):
         return score
 
     def _evaluate_monastery_specific(self, game_session: 'GameSession',
-                                     structure: 'Structure',
+                                     structure: Optional['Structure'],
                                      completion_ratio: float) -> float:
         """Evaluate monastery-specific scoring potential using preset configuration."""
         score = 0.0
@@ -974,20 +1066,21 @@ class AIPlayer(Player):
         """
         score = 0.0
         terrains = card_copy.get_terrains()
+        evaluated_structures = set()
 
         for direction, terrain_type in terrains.items():
-            if direction == "C":
+            if direction == "C" and terrains.get(direction) != "monastery":
                 continue
 
-            structure = game_session.structure_map.get((x, y, direction))
+            structure = self._get_candidate_structure(game_session, x, y, direction)
+            if structure in evaluated_structures:
+                continue
             if structure and not structure.get_figures():
+                evaluated_structures.add(structure)
                 if structure.get_is_completed():
                     score += self._preset["completion_bonus"] * 1.5
                 else:
-                    total_sides = len(structure.card_sides)
-                    completed_sides = sum(1 for card, _ in structure.card_sides
-                                          if card.get_position())
-                    completion_ratio = completed_sides / total_sides if total_sides > 0 else 0
+                    completion_ratio = self._calculate_structure_completion_ratio(structure)
                     score += completion_ratio * self._preset[
                         "figure_opportunity"]
 
@@ -1000,6 +1093,11 @@ class AIPlayer(Player):
                 if structure_type == "Field":
                     score += self._evaluate_field_figure_opportunity(
                         game_session, structure)
+            elif direction == "C" and terrain_type == "monastery":
+                completion_ratio = self._calculate_candidate_monastery_completion_ratio(
+                    game_session, x, y)
+                score += completion_ratio * self._preset["figure_opportunity"]
+                score += 40.0 if len(self.figures) > 0 else 5.0
 
         return score
 
@@ -1053,22 +1151,23 @@ class AIPlayer(Player):
         """
         score = 0.0
         terrains = card_copy.get_terrains()
+        evaluated_structures = set()
 
         for direction, terrain_type in terrains.items():
-            if direction == "C":
+            if direction == "C" and terrains.get(direction) != "monastery":
                 continue
 
-            structure = game_session.structure_map.get((x, y, direction))
+            structure = self._get_candidate_structure(game_session, x, y, direction)
+            if structure in evaluated_structures:
+                continue
             if structure:
+                evaluated_structures.add(structure)
                 opponent_figures = [
                     fig for fig in structure.get_figures()
-                    if fig.player != self
+                    if fig.get_owner() != self
                 ]
                 if opponent_figures:
-                    total_sides = len(structure.card_sides)
-                    completed_sides = sum(1 for card, _ in structure.card_sides
-                                          if card.get_position())
-                    completion_ratio = completed_sides / total_sides if total_sides > 0 else 0
+                    completion_ratio = self._calculate_structure_completion_ratio(structure)
 
                     blocking_score = 0
                     if completion_ratio > 0.8:
@@ -1138,12 +1237,16 @@ class AIPlayer(Player):
         score = 0.0
 
         terrains = card_copy.get_terrains()
+        evaluated_structures = set()
         for direction, terrain_type in terrains.items():
-            if direction == "C":
+            if direction == "C" and terrains.get(direction) != "monastery":
                 continue
 
-            structure = game_session.structure_map.get((x, y, direction))
+            structure = self._get_candidate_structure(game_session, x, y, direction)
+            if structure in evaluated_structures:
+                continue
             if structure and len(structure.card_sides) > 2:
+                evaluated_structures.add(structure)
                 score += 25.0
 
         return score
@@ -1155,16 +1258,17 @@ class AIPlayer(Player):
         score = 0.0
 
         terrains = card_copy.get_terrains()
+        evaluated_structures = set()
         for direction, terrain_type in terrains.items():
-            if direction == "C":
+            if direction == "C" and terrains.get(direction) != "monastery":
                 continue
 
-            structure = game_session.structure_map.get((x, y, direction))
+            structure = self._get_candidate_structure(game_session, x, y, direction)
+            if structure in evaluated_structures:
+                continue
             if structure:
-                total_sides = len(structure.card_sides)
-                completed_sides = sum(1 for card, _ in structure.card_sides
-                                      if card.get_position())
-                completion_ratio = completed_sides / total_sides if total_sides > 0 else 0
+                evaluated_structures.add(structure)
+                completion_ratio = self._calculate_structure_completion_ratio(structure)
 
                 if completion_ratio > 0.8:
                     score += 70.0
@@ -1191,17 +1295,18 @@ class AIPlayer(Player):
         """
         score = 0.0
         terrains = card.get_terrains()
+        evaluated_structures = set()
 
         for direction, terrain_type in terrains.items():
-            if direction == "C":
+            if direction == "C" and terrains.get(direction) != "monastery":
                 continue
 
-            structure = game_session.structure_map.get((x, y, direction))
+            structure = self._get_candidate_structure(game_session, x, y, direction)
+            if structure in evaluated_structures:
+                continue
             if structure:
-                total_sides = len(structure.card_sides)
-                completed_sides = sum(1 for card, _ in structure.card_sides
-                                      if card.get_position())
-                completion_ratio = completed_sides / total_sides if total_sides > 0 else 0
+                evaluated_structures.add(structure)
+                completion_ratio = self._calculate_structure_completion_ratio(structure)
 
                 if completion_ratio > 0.8:
                     score += 100.0
@@ -1214,6 +1319,18 @@ class AIPlayer(Player):
 
                 if not structure.get_figures():
                     score += 20.0
+            elif direction == "C" and terrain_type == "monastery":
+                completion_ratio = self._calculate_candidate_monastery_completion_ratio(
+                    game_session, x, y)
+                if completion_ratio > 0.8:
+                    score += 100.0
+                elif completion_ratio > 0.6:
+                    score += 70.0
+                elif completion_ratio > 0.4:
+                    score += 45.0
+                elif completion_ratio > 0.2:
+                    score += 25.0
+                score += 20.0
 
         return score
 
@@ -1233,14 +1350,18 @@ class AIPlayer(Player):
         """
         score = 0.0
         terrains = card.get_terrains()
+        evaluated_structures = set()
 
         for direction, terrain_type in terrains.items():
-            if direction == "C":
+            if direction == "C" and terrains.get(direction) != "monastery":
                 continue
 
             if terrain_type == "field":
-                structure = game_session.structure_map.get((x, y, direction))
+                structure = self._get_candidate_structure(game_session, x, y, direction)
+                if structure in evaluated_structures:
+                    continue
                 if structure:
+                    evaluated_structures.add(structure)
                     completed_cities = [
                         s for s in game_session.structures
                         if s.get_structure_type() == "City"
@@ -1305,7 +1426,7 @@ class AIPlayer(Player):
         should_conserve = self._should_conserve_figure(game_session)
 
         for direction in terrains.keys():
-            if direction == "C":
+            if direction == "C" and terrains.get(direction) != "monastery":
                 continue
 
             structure = game_session.structure_map.get(
@@ -1318,10 +1439,7 @@ class AIPlayer(Player):
                 if structure.get_is_completed():
                     score += self._preset["completion_bonus"] * 1.5
 
-                total_sides = len(structure.card_sides)
-                completed_sides = sum(1 for card, _ in structure.card_sides
-                                      if card.get_position())
-                completion_ratio = completed_sides / total_sides if total_sides > 0 else 0
+                completion_ratio = self._calculate_structure_completion_ratio(structure)
 
                 if completion_ratio > 0.8:
                     score += 120.0
@@ -1386,7 +1504,7 @@ class AIPlayer(Player):
 
         def evaluate_figure_placement():
             score = 0.0
-            structure = game_session.structure_map.get((x, y, direction))
+            structure = self._get_candidate_structure(game_session, x, y, direction)
 
             if not structure:
                 return 0.0
@@ -1394,10 +1512,7 @@ class AIPlayer(Player):
             if structure.get_is_completed():
                 score += self._preset["completion_bonus"] * 1.5
             else:
-                total_sides = len(structure.card_sides)
-                completed_sides = sum(1 for card, _ in structure.card_sides
-                                      if card.get_position())
-                completion_ratio = completed_sides / total_sides if total_sides > 0 else 0
+                completion_ratio = self._calculate_structure_completion_ratio(structure)
                 score += completion_ratio * self._preset["figure_opportunity"]
 
             structure_type = structure.get_structure_type()
@@ -1451,10 +1566,8 @@ class AIPlayer(Player):
         """Evaluate monastery meeple placement scoring."""
         score = 0.0
 
-        total_sides = len(structure.card_sides)
-        completed_sides = sum(1 for card, _ in structure.card_sides
-                              if card.get_position())
-        completion_ratio = completed_sides / total_sides if total_sides > 0 else 0
+        completion_ratio = self._calculate_structure_completion_ratio(
+            structure)
 
         if completion_ratio > 0.6:
             score += 60.0
@@ -1514,7 +1627,7 @@ class AIPlayer(Player):
         best_score = float('-inf')
 
         for direction in terrains.keys():
-            if direction == "C":
+            if direction == "C" and terrains.get(direction) != "monastery":
                 continue
 
             structure = game_session.structure_map.get(
@@ -1567,7 +1680,7 @@ class AIPlayer(Player):
             A score representing the desirability of this meeple placement
         """
         score = 0.0
-        structure = game_session.structure_map.get((x, y, direction))
+        structure = self._get_candidate_structure(game_session, x, y, direction)
 
         if not structure:
             return 0.0
@@ -1575,10 +1688,7 @@ class AIPlayer(Player):
         if structure.get_is_completed():
             score += 100.0
         else:
-            total_sides = len(structure.card_sides)
-            completed_sides = sum(1 for card, _ in structure.card_sides
-                                  if card.get_position())
-            completion_ratio = completed_sides / total_sides if total_sides > 0 else 0
+            completion_ratio = self._calculate_structure_completion_ratio(structure)
             score += completion_ratio * 50.0
 
         return score
