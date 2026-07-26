@@ -136,7 +136,7 @@ class AIPlayerAdvancedTests(unittest.TestCase):
             score = self.ai._evaluate_card_placement_advanced(
                 game_session, 4, 4, card)
 
-        self.assertEqual(score, 30.0)
+        self.assertEqual(score, self.ai._preset["structure_connection"] + 10.0)
         city_specific.assert_called_once()
 
     def test_advanced_meeple_placement_can_claim_monastery_center(self):

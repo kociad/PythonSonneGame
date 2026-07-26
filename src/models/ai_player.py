@@ -37,41 +37,41 @@ class AIPreset:
     }
 
     NORMAL = {
-        "completion_bonus": 150,
+        "completion_bonus": 110,
         # "size_bonus": 30,  # Reserved; currently unused by the evaluator.
-        "field_multiplier": 1.0,
+        "field_multiplier": 0.8,
         "conservation_threshold": 3,
-        "placement_threshold": 200,
-        "opponent_blocking": 0.7,
-        "center_penalty": 1.5,
-        "figure_opportunity": 120,
-        "structure_connection": 20,
-        "unoccupied_bonus": 35,
-        "completion_ratio_bonuses": [40, 70, 100, 130],
-        "size_penalties": [-20, -45, -80],
-        "field_bonuses": [15, 25, 35],
-        "city_bonuses": [40, 60, 80],
-        "road_bonuses": [30, 45, 60],
-        "monastery_bonuses": [80, 120, 160]
+        "placement_threshold": 220,
+        "opponent_blocking": 0.9,
+        "center_penalty": 2.2,
+        "figure_opportunity": 90,
+        "structure_connection": 15,
+        "unoccupied_bonus": 25,
+        "completion_ratio_bonuses": [25, 50, 75, 100],
+        "size_penalties": [-15, -35, -65],
+        "field_bonuses": [10, 20, 30],
+        "city_bonuses": [30, 50, 70],
+        "road_bonuses": [25, 40, 55],
+        "monastery_bonuses": [60, 90, 130]
     }
 
     HARD = {
-        "completion_bonus": 150,
+        "completion_bonus": 130,
         # "size_bonus": 30,  # Reserved; currently unused by the evaluator.
         "field_multiplier": 1.0,
-        "conservation_threshold": 2,
-        "placement_threshold": 200,
-        "opponent_blocking": 0.7,
-        "center_penalty": 1.5,
-        "figure_opportunity": 120,
-        "structure_connection": 20,
-        "unoccupied_bonus": 35,
-        "completion_ratio_bonuses": [40, 70, 100, 130],
-        "size_penalties": [-25, -55, -100],
-        "field_bonuses": [15, 25, 35],
-        "city_bonuses": [40, 60, 80],
-        "road_bonuses": [30, 45, 60],
-        "monastery_bonuses": [80, 120, 160]
+        "conservation_threshold": 4,
+        "placement_threshold": 210,
+        "opponent_blocking": 0.8,
+        "center_penalty": 1.8,
+        "figure_opportunity": 105,
+        "structure_connection": 18,
+        "unoccupied_bonus": 30,
+        "completion_ratio_bonuses": [30, 60, 90, 120],
+        "size_penalties": [-20, -45, -85],
+        "field_bonuses": [12, 22, 32],
+        "city_bonuses": [35, 55, 75],
+        "road_bonuses": [28, 42, 58],
+        "monastery_bonuses": [70, 105, 145]
     }
 
     EXPERT = {
