@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from models.ai_player import AIPlayer
+from models.ai_player import AIPlayer, AIPreset
 
 
 class _RotatingCardStub:
@@ -67,6 +67,33 @@ class AIPlayerAdvancedTests(unittest.TestCase):
         self.assertEqual(first_copy.rotation, 90)
         self.assertEqual(second_copy.rotation, 180)
         self.assertEqual(create_copy.call_count, 2)
+
+    def test_completion_ratio_counts_connected_structure_edges(self):
+        """Completion ratio should measure closed edges, not placed cards."""
+        connected_card = MagicMock()
+        connected_card.get_neighbors.return_value = {"N": MagicMock()}
+        open_card = MagicMock()
+        open_card.get_neighbors.return_value = {"S": None}
+        structure = MagicMock()
+        structure.get_structure_type.return_value = "Road"
+        structure.get_is_completed.return_value = False
+        structure.card_sides = {
+            (connected_card, "N"),
+            (open_card, "S"),
+        }
+
+        ratio = self.ai._calculate_structure_completion_ratio(structure)
+
+        self.assertEqual(ratio, 0.5)
+
+    def test_size_penalties_increase_with_structure_size(self):
+        """Every preset should increasingly discourage oversized structures."""
+        for preset in (AIPreset.EASY, AIPreset.NORMAL, AIPreset.HARD,
+                       AIPreset.EXPERT):
+            small, medium, large = preset["size_penalties"]
+            self.assertGreater(0, small)
+            self.assertGreater(small, medium)
+            self.assertGreater(medium, large)
 
     def test_worker_selects_best_move_from_advanced_simulation_score(self):
         """Worker should choose move with highest simulated advanced score."""
