@@ -18,11 +18,13 @@ class AIPreset:
     """Configuration presets for different AI difficulty levels."""
 
     EASY = {
+        "move_rank": 2,
+        "candidate_limit": 3,
         "completion_bonus": 100,
         "size_bonus": 20,
         "field_multiplier": 0.8,
-        "conservation_threshold": 4,
-        "placement_threshold": 20,
+        "conservation_threshold": 0,
+        "placement_threshold": 0,
         "opponent_blocking": 0.5,
         "center_penalty": 2.0,
         "figure_opportunity": 80,
@@ -37,11 +39,13 @@ class AIPreset:
     }
 
     NORMAL = {
+        "move_rank": 1,
+        "candidate_limit": 3,
         "completion_bonus": 150,
         "size_bonus": 30,
         "field_multiplier": 1.0,
-        "conservation_threshold": 3,
-        "placement_threshold": 15,
+        "conservation_threshold": 1,
+        "placement_threshold": 50,
         "opponent_blocking": 0.7,
         "center_penalty": 1.5,
         "figure_opportunity": 120,
@@ -56,11 +60,13 @@ class AIPreset:
     }
 
     HARD = {
+        "move_rank": 0,
+        "candidate_limit": 2,
         "completion_bonus": 200,
         "size_bonus": 40,
         "field_multiplier": 1.2,
         "conservation_threshold": 2,
-        "placement_threshold": 10,
+        "placement_threshold": 100,
         "opponent_blocking": 0.9,
         "center_penalty": 1.0,
         "figure_opportunity": 150,
@@ -74,24 +80,8 @@ class AIPreset:
         "monastery_bonuses": [100, 150, 200]
     }
 
-    EXPERT = {
-        "completion_bonus": 250,
-        "size_bonus": 50,
-        "field_multiplier": 1.4,
-        "conservation_threshold": 1,
-        "placement_threshold": 5,
-        "opponent_blocking": 1.0,
-        "center_penalty": 0.8,
-        "figure_opportunity": 180,
-        "structure_connection": 30,
-        "unoccupied_bonus": 55,
-        "completion_ratio_bonuses": [60, 110, 160, 210],
-        "size_penalties": [0, 0, 0],
-        "field_bonuses": [25, 35, 45],
-        "city_bonuses": [60, 80, 100],
-        "road_bonuses": [40, 55, 70],
-        "monastery_bonuses": [120, 180, 240]
-    }
+    # Expert reuses Hard evaluation and searches one extra candidate.
+    EXPERT = {**HARD, "candidate_limit": 3}
 
 
 class AIPlayer(Player):
@@ -301,26 +291,29 @@ class AIPlayer(Player):
                 strategic_scores.sort(reverse=True, key=lambda x: x[0])
                 max_candidates = settings_manager.get(
                     "AI_STRATEGIC_CANDIDATES", 5)
+                max_candidates = min(
+                    self._preset["candidate_limit"],
+                    max_candidates if max_candidates != -1 else self._preset["candidate_limit"])
                 top_candidates = strategic_scores if max_candidates == -1 else strategic_scores[
                     :max_candidates]
 
-                best_move = None
-                best_score = float("-inf")
+                simulated_moves = []
                 total_candidates = max(1, len(top_candidates))
                 for idx, (_, placement) in enumerate(top_candidates, start=1):
                     x, y, rotations_needed, card_copy = placement
                     card_score = self._simulate_card_copy_placement_advanced(
                         game_session, x, y, card_copy)
-                    if card_score > best_score:
-                        best_score = card_score
-                        best_move = placement
+                    simulated_moves.append((card_score, placement))
 
                     with self._worker_lock:
                         self._worker_progress = 0.5 + (
                             idx / total_candidates) * 0.5
 
+                simulated_moves.sort(reverse=True, key=lambda item: item[0])
+                move_rank = min(self._preset["move_rank"],
+                                len(simulated_moves) - 1)
                 result["is_valid"] = True
-                result["best_move"] = best_move
+                result["best_move"] = simulated_moves[move_rank][1]
             else:
                 result["is_valid"] = True
         finally:
@@ -492,6 +485,9 @@ class AIPlayer(Player):
         if end_idx >= len(possible_placements):
             strategic_scores.sort(reverse=True, key=lambda x: x[0])
             max_candidates = settings_manager.get("AI_STRATEGIC_CANDIDATES", 5)
+            max_candidates = min(
+                self._preset["candidate_limit"],
+                max_candidates if max_candidates != -1 else self._preset["candidate_limit"])
             if max_candidates == -1:
                 data['top_candidates'] = strategic_scores
             else:
@@ -716,6 +712,33 @@ class AIPlayer(Player):
         card_copy.rotation = card.rotation
         return card_copy
 
+    @staticmethod
+    def _get_connected_structure(game_session: 'GameSession', x: int,
+                                 y: int, direction: str):
+        """Find the structure touched by an edge of a prospective placement."""
+        direct = game_session.structure_map.get((x, y, direction))
+        if direct is not None:
+            return direct
+        neighbors = {
+            "N": (x, y - 1, "S"), "S": (x, y + 1, "N"),
+            "E": (x + 1, y, "W"), "W": (x - 1, y, "E")}
+        key = neighbors.get(direction)
+        return game_session.structure_map.get(key) if key else None
+
+    @staticmethod
+    def _count_closed_sides(structure: 'Structure') -> int:
+        """Count edges touching tiles rather than merely placed structure cards."""
+        closed = 0
+        for card, direction in structure.card_sides:
+            if direction == "C":
+                closed += 1
+                continue
+            get_neighbors = getattr(card, "get_neighbors", None)
+            neighbors = get_neighbors() if callable(get_neighbors) else None
+            if isinstance(neighbors, dict) and neighbors.get(direction):
+                closed += 1
+        return closed
+
     def _simulate_card_placement_advanced(self, game_session: 'GameSession',
                                           x: int, y: int,
                                           rotations_needed: int) -> float:
@@ -837,7 +860,7 @@ class AIPlayer(Player):
             if direction == "C":
                 continue
 
-            structure = game_session.structure_map.get((x, y, direction))
+            structure = self._get_connected_structure(game_session, x, y, direction)
             if structure:
                 score += self._preset["structure_connection"]
 
@@ -848,8 +871,7 @@ class AIPlayer(Player):
                     score += self._preset["unoccupied_bonus"]
 
                 total_sides = len(structure.card_sides)
-                completed_sides = sum(1 for card, _ in structure.card_sides
-                                      if card.get_position())
+                completed_sides = self._count_closed_sides(structure)
                 completion_ratio = completed_sides / total_sides if total_sides > 0 else 0
 
                 # Apply completion ratio bonuses
@@ -888,7 +910,7 @@ class AIPlayer(Player):
         for direction, terrain_type in terrains.items():
             if direction == "C":
                 continue
-            if not game_session.structure_map.get((x, y, direction)):
+            if not self._get_connected_structure(game_session, x, y, direction):
                 score += 10.0
 
         return score
@@ -979,14 +1001,13 @@ class AIPlayer(Player):
             if direction == "C":
                 continue
 
-            structure = game_session.structure_map.get((x, y, direction))
+            structure = self._get_connected_structure(game_session, x, y, direction)
             if structure and not structure.get_figures():
                 if structure.get_is_completed():
                     score += self._preset["completion_bonus"] * 1.5
                 else:
                     total_sides = len(structure.card_sides)
-                    completed_sides = sum(1 for card, _ in structure.card_sides
-                                          if card.get_position())
+                    completed_sides = self._count_closed_sides(structure)
                     completion_ratio = completed_sides / total_sides if total_sides > 0 else 0
                     score += completion_ratio * self._preset[
                         "figure_opportunity"]
@@ -1058,16 +1079,15 @@ class AIPlayer(Player):
             if direction == "C":
                 continue
 
-            structure = game_session.structure_map.get((x, y, direction))
+            structure = self._get_connected_structure(game_session, x, y, direction)
             if structure:
                 opponent_figures = [
                     fig for fig in structure.get_figures()
-                    if fig.player != self
+                    if fig.get_owner() != self
                 ]
                 if opponent_figures:
                     total_sides = len(structure.card_sides)
-                    completed_sides = sum(1 for card, _ in structure.card_sides
-                                          if card.get_position())
+                    completed_sides = self._count_closed_sides(structure)
                     completion_ratio = completed_sides / total_sides if total_sides > 0 else 0
 
                     blocking_score = 0
@@ -1142,7 +1162,7 @@ class AIPlayer(Player):
             if direction == "C":
                 continue
 
-            structure = game_session.structure_map.get((x, y, direction))
+            structure = self._get_connected_structure(game_session, x, y, direction)
             if structure and len(structure.card_sides) > 2:
                 score += 25.0
 
@@ -1159,11 +1179,10 @@ class AIPlayer(Player):
             if direction == "C":
                 continue
 
-            structure = game_session.structure_map.get((x, y, direction))
+            structure = self._get_connected_structure(game_session, x, y, direction)
             if structure:
                 total_sides = len(structure.card_sides)
-                completed_sides = sum(1 for card, _ in structure.card_sides
-                                      if card.get_position())
+                completed_sides = self._count_closed_sides(structure)
                 completion_ratio = completed_sides / total_sides if total_sides > 0 else 0
 
                 if completion_ratio > 0.8:
@@ -1196,11 +1215,10 @@ class AIPlayer(Player):
             if direction == "C":
                 continue
 
-            structure = game_session.structure_map.get((x, y, direction))
+            structure = self._get_connected_structure(game_session, x, y, direction)
             if structure:
                 total_sides = len(structure.card_sides)
-                completed_sides = sum(1 for card, _ in structure.card_sides
-                                      if card.get_position())
+                completed_sides = self._count_closed_sides(structure)
                 completion_ratio = completed_sides / total_sides if total_sides > 0 else 0
 
                 if completion_ratio > 0.8:
@@ -1239,7 +1257,7 @@ class AIPlayer(Player):
                 continue
 
             if terrain_type == "field":
-                structure = game_session.structure_map.get((x, y, direction))
+                structure = self._get_connected_structure(game_session, x, y, direction)
                 if structure:
                     completed_cities = [
                         s for s in game_session.structures
@@ -1319,8 +1337,7 @@ class AIPlayer(Player):
                     score += self._preset["completion_bonus"] * 1.5
 
                 total_sides = len(structure.card_sides)
-                completed_sides = sum(1 for card, _ in structure.card_sides
-                                      if card.get_position())
+                completed_sides = self._count_closed_sides(structure)
                 completion_ratio = completed_sides / total_sides if total_sides > 0 else 0
 
                 if completion_ratio > 0.8:
@@ -1345,8 +1362,7 @@ class AIPlayer(Player):
                     best_direction = direction
 
         if best_direction and best_score > 0:
-            threshold = self._preset[
-                "placement_threshold"] if should_conserve else 0.0
+            threshold = self._preset["placement_threshold"]
 
             if best_score >= threshold:
                 if game_session.play_figure(self, target_x, target_y,
@@ -1386,7 +1402,7 @@ class AIPlayer(Player):
 
         def evaluate_figure_placement():
             score = 0.0
-            structure = game_session.structure_map.get((x, y, direction))
+            structure = self._get_connected_structure(game_session, x, y, direction)
 
             if not structure:
                 return 0.0
@@ -1395,8 +1411,7 @@ class AIPlayer(Player):
                 score += self._preset["completion_bonus"] * 1.5
             else:
                 total_sides = len(structure.card_sides)
-                completed_sides = sum(1 for card, _ in structure.card_sides
-                                      if card.get_position())
+                completed_sides = self._count_closed_sides(structure)
                 completion_ratio = completed_sides / total_sides if total_sides > 0 else 0
                 score += completion_ratio * self._preset["figure_opportunity"]
 
@@ -1452,8 +1467,7 @@ class AIPlayer(Player):
         score = 0.0
 
         total_sides = len(structure.card_sides)
-        completed_sides = sum(1 for card, _ in structure.card_sides
-                              if card.get_position())
+        completed_sides = self._count_closed_sides(structure)
         completion_ratio = completed_sides / total_sides if total_sides > 0 else 0
 
         if completion_ratio > 0.6:
@@ -1567,7 +1581,7 @@ class AIPlayer(Player):
             A score representing the desirability of this meeple placement
         """
         score = 0.0
-        structure = game_session.structure_map.get((x, y, direction))
+        structure = self._get_connected_structure(game_session, x, y, direction)
 
         if not structure:
             return 0.0
@@ -1576,8 +1590,7 @@ class AIPlayer(Player):
             score += 100.0
         else:
             total_sides = len(structure.card_sides)
-            completed_sides = sum(1 for card, _ in structure.card_sides
-                                  if card.get_position())
+            completed_sides = self._count_closed_sides(structure)
             completion_ratio = completed_sides / total_sides if total_sides > 0 else 0
             score += completion_ratio * 50.0
 

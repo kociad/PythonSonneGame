@@ -140,10 +140,16 @@ def main() -> int:
           flush=True)
     print("První výpočet může chvíli trvat; průběh se vypisuje po 10 tazích.",
           flush=True)
-    for index, (left, right) in enumerate(pairing for pair in pairings
-                                          for pairing in [pair] * args.games):
-        # Alternate seats to reduce first/second-player bias.
-        first, second = (left, right) if index % 2 == 0 else (right, left)
+    schedule = [(pair_index, game_index, left, right)
+                for pair_index, (left, right) in enumerate(pairings)
+                for game_index in range(args.games)]
+    seed_pairs_per_matchup = (args.games + 1) // 2
+    for index, (pair_index, game_index, left, right) in enumerate(schedule):
+        # Mirror each shuffled deck with swapped seats to control deck luck.
+        first, second = ((left, right) if game_index % 2 == 0
+                         else (right, left))
+        game_seed = (args.seed + pair_index * seed_pairs_per_matchup
+                     + game_index // 2)
         game_started = time.perf_counter()
         print(f"\n[{index + 1:>3}/{total}] Start: {first} vs. {second}",
               flush=True)
@@ -153,7 +159,7 @@ def main() -> int:
             print(f"          průběh: {turns}/{deck_size} tahů "
                   f"({elapsed:.1f} s)", flush=True)
 
-        result = play_game(first, second, args.seed + index, index + 1,
+        result = play_game(first, second, game_seed, index + 1,
                            show_progress)
         results.append(result)
         print(f"          výsledek: {first} {result.score_1} : "
