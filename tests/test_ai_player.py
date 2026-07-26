@@ -68,8 +68,23 @@ class AIPlayerAdvancedTests(unittest.TestCase):
         self.assertEqual(second_copy.rotation, 180)
         self.assertEqual(create_copy.call_count, 2)
 
-    def test_worker_selects_best_move_from_advanced_simulation_score(self):
-        """Worker should choose move with highest simulated advanced score."""
+    def test_prospective_placement_finds_neighbor_structure(self):
+        game_session = MagicMock()
+        structure = _StructureStub()
+        game_session.structure_map = {(4, 3, "S"): structure}
+        self.assertIs(self.ai._get_connected_structure(
+            game_session, 4, 4, "N"), structure)
+
+    def test_count_closed_sides_uses_neighbors(self):
+        open_card, closed_card = MagicMock(), MagicMock()
+        open_card.get_neighbors.return_value = {"N": None}
+        closed_card.get_neighbors.return_value = {"S": MagicMock()}
+        structure = MagicMock()
+        structure.card_sides = {(open_card, "N"), (closed_card, "S")}
+        self.assertEqual(self.ai._count_closed_sides(structure), 1)
+
+    def test_normal_worker_selects_second_ranked_simulation(self):
+        """Normal AI deliberately leaves the strongest move to harder presets."""
         game_session = MagicMock()
         game_session.get_current_card.return_value = MagicMock()
 
@@ -101,7 +116,7 @@ class AIPlayerAdvancedTests(unittest.TestCase):
 
         self.assertIsNotNone(self.ai._worker_result)
         self.assertTrue(self.ai._worker_result["is_valid"])
-        self.assertEqual(self.ai._worker_result["best_move"], candidate_2)
+        self.assertEqual(self.ai._worker_result["best_move"], candidate_1)
         self.assertEqual(self.ai._worker_progress, 1.0)
         self.assertFalse(self.ai._worker_running)
 
