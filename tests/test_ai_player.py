@@ -87,8 +87,6 @@ class AIPlayerAdvancedTests(unittest.TestCase):
                              return_value=1.0), \
                 patch.object(self.ai, "_evaluate_figure_opportunity_advanced",
                              return_value=1.0), \
-                patch.object(self.ai, "_evaluate_opponent_blocking",
-                             return_value=1.0), \
                 patch.object(self.ai, "_evaluate_multi_turn_potential",
                              return_value=1.0), \
                 patch.object(
@@ -104,6 +102,19 @@ class AIPlayerAdvancedTests(unittest.TestCase):
         self.assertEqual(self.ai._worker_result["best_move"], candidate_2)
         self.assertEqual(self.ai._worker_progress, 1.0)
         self.assertFalse(self.ai._worker_running)
+
+    def test_figure_opportunity_ignores_completed_structures(self):
+        """Completed structures should not create future meeple opportunities."""
+        card = MagicMock()
+        card.get_terrains.return_value = {"N": "road"}
+        completed_structure = _StructureStub(completed=True)
+        game_session = MagicMock()
+        game_session.structure_map = {(4, 5, "N"): completed_structure}
+
+        score = self.ai._evaluate_figure_opportunity_advanced(
+            game_session, 4, 5, card)
+
+        self.assertEqual(score, 0.0)
 
     def test_execute_best_move_places_card_successfully(self):
         """Best-move execution should place card and continue to meeple phase."""
