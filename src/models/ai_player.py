@@ -18,12 +18,10 @@ class AIPreset:
     """Configuration presets for different AI difficulty levels."""
 
     EASY = {
-        "completion_bonus": 100,
         # "size_bonus": 20,  # Reserved; currently unused by the evaluator.
         "field_multiplier": 0.8,
         "conservation_threshold": 4,
         "placement_threshold": 10000,
-        "opponent_blocking": 0.5,
         "center_penalty": 2.0,
         "figure_opportunity": 80,
         "structure_connection": 15,
@@ -37,12 +35,10 @@ class AIPreset:
     }
 
     NORMAL = {
-        "completion_bonus": 110,
         # "size_bonus": 30,  # Reserved; currently unused by the evaluator.
         "field_multiplier": 0.8,
         "conservation_threshold": 3,
         "placement_threshold": 220,
-        "opponent_blocking": 0.9,
         "center_penalty": 2.2,
         "figure_opportunity": 90,
         "structure_connection": 15,
@@ -56,12 +52,10 @@ class AIPreset:
     }
 
     HARD = {
-        "completion_bonus": 130,
         # "size_bonus": 30,  # Reserved; currently unused by the evaluator.
         "field_multiplier": 1.0,
         "conservation_threshold": 4,
         "placement_threshold": 210,
-        "opponent_blocking": 0.8,
         "center_penalty": 1.8,
         "figure_opportunity": 105,
         "structure_connection": 18,
@@ -75,12 +69,10 @@ class AIPreset:
     }
 
     EXPERT = {
-        "completion_bonus": 180,
         # "size_bonus": 30,  # Reserved; currently unused by the evaluator.
         "field_multiplier": 1.0,
         "conservation_threshold": 2,
         "placement_threshold": 200,
-        "opponent_blocking": 0.5,
         "center_penalty": 1.0,
         "figure_opportunity": 140,
         "structure_connection": 20,
@@ -109,13 +101,11 @@ class AIPlayer(Player):
     - EXPERT: Advanced strategies, sophisticated evaluation with multi-turn planning
     
     Key Preset Parameters:
-    - completion_bonus: Points awarded for completing structures (higher = more completion-focused)
     - size_bonus: Reserved for future use; currently not part of move evaluation
     - field_multiplier: Multiplier for field scoring potential (higher = more field-focused)
     - conservation_threshold: When to conserve meeples (lower = more aggressive placement)
     - placement_threshold: Minimum score to place a meeple (higher = more selective)
-    - opponent_blocking: Weight for blocking opponent moves (higher = more defensive)
-    - center_penalty: Penalty for placing near center (higher = avoids center)
+    - center_penalty: Penalty per tile of distance from center (higher = stays closer to center)
     - meeple_opportunity: Bonus for meeple placement opportunities (higher = places more meeples)
     - structure_connection: Bonus for connecting to existing structures (higher = more connection-focused)
     - unoccupied_bonus: Bonus for unoccupied structures (higher = prefers empty structures)
@@ -288,8 +278,6 @@ class AIPlayer(Player):
                     strategic_score = self._evaluate_card_placement_advanced(
                         game_session, x, y, card_copy)
                     strategic_score += self._evaluate_figure_opportunity_advanced(
-                        game_session, x, y, card_copy)
-                    strategic_score += self._evaluate_opponent_blocking(
                         game_session, x, y, card_copy)
                     strategic_score += self._evaluate_multi_turn_potential(
                         game_session, x, y, card_copy)
@@ -479,8 +467,6 @@ class AIPlayer(Player):
             strategic_score = self._evaluate_card_placement_advanced(
                 data['game_session'], x, y, card_copy)
             strategic_score += self._evaluate_figure_opportunity_advanced(
-                data['game_session'], x, y, card_copy)
-            strategic_score += self._evaluate_opponent_blocking(
                 data['game_session'], x, y, card_copy)
             strategic_score += self._evaluate_multi_turn_potential(
                 data['game_session'], x, y, card_copy)
@@ -758,10 +744,6 @@ class AIPlayer(Player):
             "field", lambda: self._evaluate_field_potential(
                 game_session, x, y, current_card))
         score += self._evaluate_cached(
-            current_card, x, y,
-            "blocking", lambda: self._evaluate_opponent_blocking(
-                game_session, x, y, current_card))
-        score += self._evaluate_cached(
             current_card, x, y, "multiturn",
             lambda: self._evaluate_multi_turn_potential(
                 game_session, x, y, current_card))
@@ -804,10 +786,6 @@ class AIPlayer(Player):
         score += self._evaluate_cached(
             card_copy, x, y,
             "field", lambda: self._evaluate_field_potential(
-                game_session, x, y, card_copy))
-        score += self._evaluate_cached(
-            card_copy, x, y,
-            "blocking", lambda: self._evaluate_opponent_blocking(
                 game_session, x, y, card_copy))
         score += self._evaluate_cached(
             card_copy, x, y, "multiturn",
@@ -923,9 +901,6 @@ class AIPlayer(Player):
             if structure:
                 evaluated_structures.add(structure)
                 score += self._preset["structure_connection"]
-
-                if structure.get_is_completed():
-                    score += self._preset["completion_bonus"]
 
                 if not structure.get_figures():
                     score += self._preset["unoccupied_bonus"]
@@ -1075,14 +1050,12 @@ class AIPlayer(Player):
             structure = self._get_candidate_structure(game_session, x, y, direction)
             if structure in evaluated_structures:
                 continue
-            if structure and not structure.get_figures():
+            if (structure and not structure.get_figures()
+                    and not structure.get_is_completed()):
                 evaluated_structures.add(structure)
-                if structure.get_is_completed():
-                    score += self._preset["completion_bonus"] * 1.5
-                else:
-                    completion_ratio = self._calculate_structure_completion_ratio(structure)
-                    score += completion_ratio * self._preset[
-                        "figure_opportunity"]
+                completion_ratio = self._calculate_structure_completion_ratio(structure)
+                score += completion_ratio * self._preset[
+                    "figure_opportunity"]
 
                 if len(self.figures) > 0:
                     score += 40.0
@@ -1132,54 +1105,6 @@ class AIPlayer(Player):
             score += self._preset["field_bonuses"][1]
         elif field_size > 4:
             score += self._preset["field_bonuses"][0]
-
-        return score
-
-    def _evaluate_opponent_blocking(self, game_session: 'GameSession', x: int,
-                                    y: int, card_copy: Card) -> float:
-        """
-        Evaluate the potential to block opponents or prevent them from scoring.
-        
-        Args:
-            game_session: The current game session
-            x: X coordinate for placement
-            y: Y coordinate for placement
-            card_copy: A copy of the card being evaluated
-            
-        Returns:
-            A score representing blocking potential
-        """
-        score = 0.0
-        terrains = card_copy.get_terrains()
-        evaluated_structures = set()
-
-        for direction, terrain_type in terrains.items():
-            if direction == "C" and terrains.get(direction) != "monastery":
-                continue
-
-            structure = self._get_candidate_structure(game_session, x, y, direction)
-            if structure in evaluated_structures:
-                continue
-            if structure:
-                evaluated_structures.add(structure)
-                opponent_figures = [
-                    fig for fig in structure.get_figures()
-                    if fig.get_owner() != self
-                ]
-                if opponent_figures:
-                    completion_ratio = self._calculate_structure_completion_ratio(structure)
-
-                    blocking_score = 0
-                    if completion_ratio > 0.8:
-                        blocking_score = 120.0
-                    elif completion_ratio > 0.6:
-                        blocking_score = 80.0
-                    elif completion_ratio > 0.4:
-                        blocking_score = 50.0
-                    else:
-                        blocking_score = 25.0
-
-                    score += blocking_score * self._preset["opponent_blocking"]
 
         return score
 
@@ -1436,9 +1361,6 @@ class AIPlayer(Player):
                 score = self._evaluate_figure_placement_advanced(
                     game_session, target_x, target_y, direction)
 
-                if structure.get_is_completed():
-                    score += self._preset["completion_bonus"] * 1.5
-
                 completion_ratio = self._calculate_structure_completion_ratio(structure)
 
                 if completion_ratio > 0.8:
@@ -1509,11 +1431,8 @@ class AIPlayer(Player):
             if not structure:
                 return 0.0
 
-            if structure.get_is_completed():
-                score += self._preset["completion_bonus"] * 1.5
-            else:
-                completion_ratio = self._calculate_structure_completion_ratio(structure)
-                score += completion_ratio * self._preset["figure_opportunity"]
+            completion_ratio = self._calculate_structure_completion_ratio(structure)
+            score += completion_ratio * self._preset["figure_opportunity"]
 
             structure_type = structure.get_structure_type()
             if structure_type == "City":
